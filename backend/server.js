@@ -2,17 +2,6 @@
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-// Import middleware
-let errorHandler, notFound;
-try {
-  const middleware = require('./middleware/errorHandler');
-  errorHandler = middleware.errorHandler;
-  notFound = middleware.notFound;
-} catch (e) {
-  errorHandler = (err, req, res, next) => res.status(500).json({ error: err.message });
-  notFound = (req, res) => res.status(404).json({ message: 'Not found' });
-}
-
 const app = express();
 
 // CORS
@@ -29,21 +18,25 @@ const connectDB = async () => {
     console.log('MongoDB connected');
   } catch (err) {
     console.error('MongoDB error:', err.message);
-    throw err;
   }
 };
 
+// Connect to DB on startup
+connectDB();
+
 // DB Middleware
 app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'Database connection failed', details: err.message });
+  if (!isConnected) {
+    try {
+      await connectDB();
+    } catch (err) {
+      return res.status(500).json({ error: 'Database connection failed' });
+    }
   }
+  next();
 });
 
-// Routes
+// Import and use routes
 try {
   app.use('/api/auth', require('./routes/authRoutes'));
   app.use('/api/courts', require('./routes/courtRoutes'));
@@ -66,12 +59,11 @@ app.get('/', (req, res) => {
 });
 
 // Error handling
-app.use(notFound);
-app.use(errorHandler);
+app.use((req, res) => res.status(404).json({ message: 'Not found' }));
+app.use((err, req, res, next) => res.status(500).json({ error: err.message }));
 
-// Local dev
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(process.env.PORT || 5000, () => console.log('Server running'));
-}
-
-module.exports = app;
+// ALWAYS listen on port - required for Render
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Server running on port ' + PORT);
+});
