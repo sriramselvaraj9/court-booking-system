@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
@@ -19,7 +19,11 @@ const app = express();
 connectDB();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // API Routes
@@ -36,14 +40,23 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Court Booking API is running' });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ message: 'Court Booking API - Use /api endpoints' });
+});
+
 // Error handling
 app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(Server running on port +PORT);
+  });
+}
 
+// Export for Vercel
 module.exports = app;
