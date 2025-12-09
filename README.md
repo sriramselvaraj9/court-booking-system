@@ -383,3 +383,5 @@ MIT License - feel free to use this project for learning or building upon.
 ---
 
 Built with ❤️ for the Acorn Globus Full Stack Developer Assignment
+#   T r i g g e r   r e b u i l d  
+ 
