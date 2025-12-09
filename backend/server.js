@@ -1,91 +1,77 @@
 ﻿const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const { errorHandler, notFound } = require('./middleware/errorHandler');
 
-// Route imports
-const authRoutes = require('./routes/authRoutes');
-const courtRoutes = require('./routes/courtRoutes');
-const coachRoutes = require('./routes/coachRoutes');
-const equipmentRoutes = require('./routes/equipmentRoutes');
-const bookingRoutes = require('./routes/bookingRoutes');
-const pricingRuleRoutes = require('./routes/pricingRuleRoutes');
-const adminRoutes = require('./routes/adminRoutes');
+// Import middleware
+let errorHandler, notFound;
+try {
+  const middleware = require('./middleware/errorHandler');
+  errorHandler = middleware.errorHandler;
+  notFound = middleware.notFound;
+} catch (e) {
+  errorHandler = (err, req, res, next) => res.status(500).json({ error: err.message });
+  notFound = (req, res) => res.status(404).json({ message: 'Not found' });
+}
 
 const app = express();
 
-// MongoDB connection with caching for serverless
-let cached = global.mongoose;
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
-}
-
-async function connectDB() {
-  if (cached.conn) return cached.conn;
-  
-  if (!cached.promise) {
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, {
-      bufferCommands: false,
-    });
-  }
-  
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
-  
-  return cached.conn;
-}
-
-// Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// CORS
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// Connect to DB middleware
+// MongoDB Connection
+let isConnected = false;
+const connectDB = async () => {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    isConnected = true;
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB error:', err.message);
+    throw err;
+  }
+};
+
+// DB Middleware
 app.use(async (req, res, next) => {
   try {
     await connectDB();
     next();
-  } catch (error) {
-    console.error('DB Connection Error:', error);
-    res.status(500).json({ error: 'Database connection failed' });
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed', details: err.message });
   }
 });
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/courts', courtRoutes);
-app.use('/api/coaches', coachRoutes);
-app.use('/api/equipment', equipmentRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/pricing-rules', pricingRuleRoutes);
-app.use('/api/admin', adminRoutes);
+// Routes
+try {
+  app.use('/api/auth', require('./routes/authRoutes'));
+  app.use('/api/courts', require('./routes/courtRoutes'));
+  app.use('/api/coaches', require('./routes/coachRoutes'));
+  app.use('/api/equipment', require('./routes/equipmentRoutes'));
+  app.use('/api/bookings', require('./routes/bookingRoutes'));
+  app.use('/api/pricing-rules', require('./routes/pricingRuleRoutes'));
+  app.use('/api/admin', require('./routes/adminRoutes'));
+} catch (e) {
+  console.error('Route loading error:', e.message);
+}
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Court Booking API is running' });
+  res.json({ status: 'OK', db: isConnected ? 'connected' : 'disconnected' });
 });
 
-// Root route  
 app.get('/', (req, res) => {
-  res.json({ message: 'Court Booking API', endpoints: ['/api/health', '/api/courts', '/api/auth'] });
+  res.json({ message: 'Court Booking API', version: '1.0' });
 });
 
 // Error handling
 app.use(notFound);
 app.use(errorHandler);
 
-// For local development
+// Local dev
 if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => console.log('Server running on port ' + PORT));
+  app.listen(process.env.PORT || 5000, () => console.log('Server running'));
 }
 
-// Export for Vercel
 module.exports = app;
